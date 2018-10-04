@@ -3,39 +3,21 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <unordered_map>
+
+namespace YHL {
 
 template<typename T>
 class singleton final {
 private:
-    static std::shared_ptr<T> instance;   // 唯一实例
-
-    /* 模板中, 内部类不能访问外部类
-    class cleaner {
-    private:
-        std::mutex mtx;
-    public:
-        ~cleaner() {
-
-            std::lock_guard<std::mutex> lck(mtx);
-
-            if(instance != nullptr) {
-                delete instance;
-                instance = nullptr;
-                std::cout << "dtor in cleaner\n";
-            }
-        }
-    };
-
-    cleaner cleanHolder; // 利用内部 GC 类的析构函数，销毁外部类的静态成员
-
-    */
+    static std::shared_ptr<T> instance;
 
     singleton() = default;
     singleton(const singleton&) = delete;
     singleton(singleton&&) = delete;
 
 public:
-    // 接收任意参数构造
     template<typename... Args>
     static std::shared_ptr<T> getInstance(Args&&... args) {
 
@@ -53,8 +35,50 @@ public:
         return getInstance(args...).get();
     }
 } ;
-
 template<typename T>
 std::shared_ptr<T> singleton<T>::instance = nullptr;
+
+
+
+template<typename T, typename Key = std::string>
+class multiSingleton final {
+private:
+
+    static std::unordered_map< Key, std::shared_ptr<T> > keyMap;
+
+    // static std::mutex mtx;  why not allowed ?
+
+    multiSingleton() = default;
+    multiSingleton(const multiSingleton&) = delete;
+    multiSingleton(multiSingleton&&) = delete;
+
+public:
+    template<typename K, typename... Args>
+    static std::shared_ptr<T> getInstance(K&& key, Args&&... args) {
+
+        std::shared_ptr<T> instance = nullptr;
+
+        static std::mutex mtx;
+
+        std::lock_guard<std::mutex> lck(mtx);
+
+        auto tar = keyMap.find (std::forward<K>(key));
+        if(tar == keyMap.end ()) {
+
+            instance = std::make_shared<T>(std::forward<Args>(args)...);
+            keyMap.emplace(key, instance);
+        }
+        else {
+            instance = tar->second;
+        }
+        return instance;
+    }
+};
+
+template<typename T, typename Key>
+std::unordered_map< Key, std::shared_ptr<T> > multiSingleton<T, Key>::keyMap;
+
+}
+
 
 #endif // SINGLETON_H
