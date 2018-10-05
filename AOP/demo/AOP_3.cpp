@@ -2,63 +2,88 @@
 #include <memory>
 #include <functional>
 
-template<typename T, typename Derived>
-class Aspect {
-private:
-	T* ptr;
-	Derived* cast() {
-		return static_cast<Derived*>(this);
+namespace AOP_static {
+
+	template<typename T, typename Derived>
+	class Aspect {
+	private:
+		T* ptr;
+		Derived& cast() {
+			return static_cast<Derived&>(*this);
+		}
+	public:
+		explicit Aspect(T *_ptr) : ptr(_ptr) {}
+
+		void before_wrapper(T *p) {
+
+			// pre 
+
+			this->cast().before(p);
+
+			// then
+		}
+
+		void after_wrapper(T *p) {
+
+			// pre
+
+			this->cast().after(p);
+
+			// then
+		}
+
+		std::shared_ptr<T> operator->() {  // AOP 关键体现在重载 -> 然后
+
+			before_wrapper(ptr);
+
+			return std::shared_ptr<T>(ptr, [this](T *p){ this->after_wrapper(p); }); 
+		}
+	};
+
+	template<template <typename> class aspect, typename T>
+	inline aspect<T> make_aspect(T *ptr) {
+		return aspect<T>(ptr);
 	}
-public:
-	explicit Aspect(T *_ptr) : ptr(_ptr) {}
 
-	void before_wrapper(T *p) {
+	template<typename T>
+	class log_aspect : public Aspect<T, log_aspect<T> > {
 
-		// pre 
+		using base_type = Aspect<T, log_aspect<T> >;
+	public:
 
-		this->cast()->before(p);
+		log_aspect(T *ptr) : base_type(ptr){}
 
-		// then
-	}
+		void before(T *ptr) {
+			std::cout << "before.....\n\n";
+		}
 
-	void after_wrapper(T *p) {
+		void after(T *ptr) {
+			std::cout << "after......\n\n";
+		}
+	};
 
-		// pre
+	template<typename T>
+	class time_aspect : public Aspect<T, time_aspect<T> > {
 
-		this->cast()->after(p);
+		using base_type = Aspect<T, time_aspect<T> >;
 
-		// then
-	}
+	private:
+		time_t beg = 0;
+	public:
 
-	std::shared_ptr<T> operator->() {
+		time_aspect(T *ptr) : base_type(ptr){}
 
-		before_wrapper(ptr);
+		void before(T *ptr) {
+			std::cout << "start.....time  :  " << beg << "\n\n";
+		}
 
-		return std::shared_ptr<T>(ptr, [this](T *p){ this->after_wrapper(p); }); 
-	}
-};
+		void after(T *ptr) {
+			time_t cur = 4;
+			std::cout << "end......time  :  " << cur - beg << "\n\n";
+		}
+	};
 
-template<template <typename> class aspect, typename T>
-inline aspect<T> make_aspect(T *ptr) {
-	return aspect<T>(ptr);
-}
-
-template<typename T>
-class log_aspect : public Aspect<T, log_aspect<T> > {
-
-	using base_type = Aspect<T, log_aspect<T> >;
-public:
-
-	log_aspect(T *ptr) : base_type(ptr){}
-
-	void before(T *ptr) {
-		std::cout << "before.....\n\n";
-	}
-	
-	void after(T *ptr) {
-		std::cout << "after......\n\n";
-	}
-};
+} // AOP2
 
 int main() {
 
@@ -68,7 +93,11 @@ int main() {
 		}
 	} ;
 
-	std::shared_ptr<example> ptr(new example());
-	make_aspect<log_aspect>(ptr.get())->test();
+	std::shared_ptr<example> ptr = std::make_shared<example>();
+
+	AOP_static::make_aspect<AOP_static::log_aspect>(ptr.get())->test();
+
+	AOP_static::make_aspect<AOP_static::time_aspect>(ptr.get())->test();
+
 	return 0;
 }
